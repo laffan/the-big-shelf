@@ -1,0 +1,50 @@
+name: BigBookshelf
+options:
+  bundleIdPrefix: com.biglibrary
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    # Pull the Dropbox app key in from Config/Secrets.xcconfig (gitignored).
+    # See Config/Secrets.xcconfig.example.
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"   # 1 = iPhone, 2 = iPad
+
+packages:
+  SwiftyDropbox:
+    url: https://github.com/dropbox/SwiftyDropbox.git
+    from: "10.0.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    from: "6.0.0"
+
+targets:
+  BigBookshelf:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources
+      - path: Resources
+    configFiles:
+      Debug: Config/Secrets.xcconfig
+      Release: Config/Secrets.xcconfig
+    settings:
+      base:
+        INFOPLIST_FILE: Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        PRODUCT_BUNDLE_IDENTIFIER: com.biglibrary.bigbookshelf
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # DROPBOX_APP_KEY is supplied by Config/Secrets.xcconfig and consumed
+        # by Info.plist (URL scheme) and at runtime.
+    dependencies:
+      - package: SwiftyDropbox
+      - package: GRDB

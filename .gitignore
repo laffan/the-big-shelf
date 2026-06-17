@@ -1,0 +1,25 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+
+# XcodeGen generates the .xcodeproj from project.yml — keep it out of git
+# (run `xcodegen generate` to produce it)
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Secrets — never commit your real Dropbox app key
+Config/Secrets.xcconfig
+
+# macOS
+.DS_Store
