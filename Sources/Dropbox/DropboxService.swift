@@ -54,7 +54,7 @@ final class DropboxService {
             print("⚠️ Big Bookshelf: DropboxAppKey missing. Set it in Config/Secrets.xcconfig.")
             return
         }
-        DropboxClientsManager.setupWithAppKeyMobile(appKey)
+        DropboxClientsManager.setupWithAppKey(appKey)
     }
 
     var isAuthorized: Bool { DropboxClientsManager.authorizedClient != nil }
@@ -128,7 +128,7 @@ final class DropboxService {
     func download(path: String, to destination: URL) async throws -> URL {
         let client = try client
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
-            client.files.download(path: path, overwrite: true) { _, _ in destination }
+            client.files.download(path: path, overwrite: true, destination: destination)
                 .response { response, error in
                     if let response {
                         cont.resume(returning: response.1)

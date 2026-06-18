@@ -15,7 +15,7 @@ struct BigBookshelfApp: App {
                 .environmentObject(appState)
                 .onOpenURL { url in
                     // Completes the Dropbox OAuth round-trip.
-                    _ = DropboxClientsManager.handleRedirectURL(url, includeBackgroundTasks: true) { result in
+                    _ = DropboxClientsManager.handleRedirectURL(url, includeBackgroundClient: true) { result in
                         switch result {
                         case .success:
                             NotificationCenter.default.post(name: .dropboxDidAuthorize, object: nil)
