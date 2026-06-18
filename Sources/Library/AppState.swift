@@ -38,8 +38,12 @@ final class AppState: ObservableObject {
     private static let sortKey = "BigBookshelf.SortOrder"
 
     init() {
-        let saved = UserDefaults.standard.string(forKey: Self.sortKey)
-        sortOrder = saved.flatMap(LibrarySortOrder.init(rawValue:)) ?? .dateAdded
+        if let saved = UserDefaults.standard.string(forKey: Self.sortKey),
+           let order = LibrarySortOrder(rawValue: saved) {
+            sortOrder = order
+        } else {
+            sortOrder = .dateAdded
+        }
     }
 
     /// Filtered + sorted view of the catalog by title or author.
@@ -66,7 +70,7 @@ final class AppState: ObservableObject {
     func bootstrap() {
         config = LibraryConfig.load()
 
-        if let config, DropboxService.shared.isAuthorized {
+        if config != nil, DropboxService.shared.isAuthorized {
             // We have a library and a session — show whatever we cached, then
             // sync in the background to pick up new titles.
             if loadCachedCatalog() {
