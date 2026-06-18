@@ -104,14 +104,33 @@ final class CalibreMetadataReader {
         }
     }
 
-    /// Calibre stores timestamps as ISO-8601 text.
+    /// Parses a Calibre timestamp. Calibre stores these as e.g.
+    /// "2019-05-04 19:31:00.000000+00:00" — a space (not 'T') between date and
+    /// time, often with microsecond precision — which ISO8601DateFormatter
+    /// rejects out of the box, so we normalise and fall back as needed.
     private static func parseDate(_ value: String?) -> Date? {
-        guard let value else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
+        guard let value, !value.isEmpty else { return nil }
+        let normalized = value.replacingOccurrences(of: " ", with: "T")
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: normalized) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: normalized) { return date }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(identifier: "UTC")
+        for format in [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ",
+            "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd",
+        ] {
+            df.dateFormat = format
+            if let date = df.date(from: normalized) { return date }
+        }
+        return nil
     }
 
     /// Extracts a 4-digit year from a Calibre date string (e.g. "2018-04-01...").
