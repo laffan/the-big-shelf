@@ -124,18 +124,24 @@ final class DropboxService {
     // MARK: - Downloads
 
     /// Downloads a file to `destination`, overwriting any existing file there.
+    /// `progress` (if given) is called with a 0...1 fraction on a background
+    /// queue as bytes arrive.
     @discardableResult
-    func download(path: String, to destination: URL) async throws -> URL {
+    func download(path: String, to destination: URL,
+                  progress: ((Double) -> Void)? = nil) async throws -> URL {
         let client = try client
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
-            client.files.download(path: path, overwrite: true, destination: destination)
-                .response { response, error in
-                    if let response {
-                        cont.resume(returning: response.1)
-                    } else {
-                        cont.resume(throwing: Self.map(error))
-                    }
+            let request = client.files.download(path: path, overwrite: true, destination: destination)
+            if let progress {
+                request.progress { progress($0.fractionCompleted) }
+            }
+            request.response { response, error in
+                if let response {
+                    cont.resume(returning: response.1)
+                } else {
+                    cont.resume(throwing: Self.map(error))
                 }
+            }
         }
     }
 

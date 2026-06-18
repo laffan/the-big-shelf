@@ -9,9 +9,16 @@ struct BookDetailView: View {
 
     @State private var detail: BookDetail?
     @State private var cover: UIImage?
-    @State private var downloadingFormat: String?
+    @State private var states: [String: FormatState] = [:]
     @State private var shareURL: URL?
     @State private var downloadError: String?
+
+    /// Per-format download lifecycle.
+    enum FormatState: Equatable {
+        case idle
+        case downloading(Double)
+        case downloaded
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,6 +42,10 @@ struct BookDetailView: View {
             }
             .task {
                 detail = appState.loadDetail(for: book)
+                // Seed each format's state from what's already saved on disk.
+                for format in detail?.formats ?? [] {
+                    states[format.format] = appState.downloadedURL(for: format, of: book) != nil ? .downloaded : .idle
+                }
                 cover = await CoverCache.shared.image(for: book, libraryRoot: appState.config?.rootPath ?? "")
             }
             .sheet(item: $shareURL) { url in
@@ -103,7 +114,7 @@ struct BookDetailView: View {
     }
 
     private func formatRow(_ format: BookFormat) -> some View {
-        HStack {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(format.format).font(.body.weight(.medium))
                 if let size = format.sizeBytes {
@@ -112,20 +123,53 @@ struct BookDetailView: View {
                 }
             }
             Spacer()
-            if downloadingFormat == format.format {
-                ProgressView()
-            } else {
+            formatActions(format)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private func formatActions(_ format: BookFormat) -> some View {
+        switch states[format.format] ?? .idle {
+        case .idle:
+            Button {
+                Task { await download(format) }
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.bordered)
+
+        case .downloading(let fraction):
+            HStack(spacing: 8) {
+                ProgressView(value: fraction)
+                    .frame(width: 90)
+                Text("\(Int(fraction * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+        case .downloaded:
+            HStack(spacing: 8) {
                 Button {
-                    Task { await download(format) }
+                    if let url = appState.downloadedURL(for: format, of: book) {
+                        shareURL = url
+                    }
                 } label: {
                     Label("Send", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(role: .destructive) {
+                    appState.deleteDownload(format, of: book)
+                    states[format.format] = .idle
+                } label: {
+                    Image(systemName: "trash")
                 }
                 .buttonStyle(.bordered)
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var metadataSection: some View {
@@ -141,12 +185,14 @@ struct BookDetailView: View {
     }
 
     private func download(_ format: BookFormat) async {
-        downloadingFormat = format.format
-        defer { downloadingFormat = nil }
+        states[format.format] = .downloading(0)
         do {
-            let url = try await appState.downloadFormat(format, of: book)
-            shareURL = url
+            _ = try await appState.downloadFormat(format, of: book) { fraction in
+                states[format.format] = .downloading(fraction)
+            }
+            states[format.format] = .downloaded
         } catch {
+            states[format.format] = .idle
             downloadError = error.localizedDescription
         }
     }

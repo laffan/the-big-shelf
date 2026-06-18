@@ -5,6 +5,8 @@ import SwiftUI
 struct BookCoverCell: View {
     let book: Book
     let libraryRoot: String
+    /// At high zoom (many small columns) we drop the text labels for density.
+    var compact: Bool = false
 
     @State private var image: UIImage?
     @State private var didAttempt = false
@@ -31,14 +33,16 @@ struct BookCoverCell: View {
             )
             .shadow(color: .black.opacity(0.15), radius: 3, y: 2)
 
-            Text(book.title)
-                .font(.caption2)
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text(book.displayAuthors)
-                .font(.caption2)
-                .lineLimit(1)
-                .foregroundStyle(.secondary)
+            if !compact {
+                Text(book.title)
+                    .font(.caption2)
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text(book.displayAuthors)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+            }
         }
         .task(id: book.id) { await loadCover() }
     }

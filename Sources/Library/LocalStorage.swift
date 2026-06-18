@@ -25,8 +25,33 @@ enum LocalStorage {
         supportDirectory.appendingPathComponent("metadata.db")
     }
 
-    /// A temporary location for a freshly downloaded format file, ready to share.
-    static func temporaryExportURL(fileName: String) -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+    /// Persistent home for downloaded book files. They stay until the user
+    /// deletes them, so books are available offline once downloaded.
+    static var downloadsDirectory: URL {
+        let url = supportDirectory.appendingPathComponent("Downloads", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+}
+
+/// Tracks downloaded format files on disk. The filesystem is the source of
+/// truth — a file's presence means it's downloaded.
+enum DownloadsStore {
+    private static func bookDirectory(_ bookId: Int64) -> URL {
+        let url = LocalStorage.downloadsDirectory.appendingPathComponent("\(bookId)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    static func fileURL(bookId: Int64, fileName: String) -> URL {
+        bookDirectory(bookId).appendingPathComponent(fileName)
+    }
+
+    static func isDownloaded(bookId: Int64, fileName: String) -> Bool {
+        FileManager.default.fileExists(atPath: fileURL(bookId: bookId, fileName: fileName).path)
+    }
+
+    static func delete(bookId: Int64, fileName: String) {
+        try? FileManager.default.removeItem(at: fileURL(bookId: bookId, fileName: fileName))
     }
 }

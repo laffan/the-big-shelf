@@ -17,13 +17,19 @@ struct Book: Identifiable, Hashable {
     let path: String
     let hasCover: Bool
     let lastModified: Date?
+    /// Calibre's `timestamp` — when the book was added to the library. Used for
+    /// the default "recently added" ordering.
+    let dateAdded: Date?
+    /// Publication year, parsed from Calibre's `pubdate`.
+    let publicationYear: Int?
 
     /// Lowercased title+authors, computed once at load so that filtering the
     /// whole catalog on each keystroke stays cheap even with thousands of books.
     let searchHaystack: String
 
     init(id: Int64, title: String, titleSort: String, authors: [String],
-         authorSort: String, path: String, hasCover: Bool, lastModified: Date?) {
+         authorSort: String, path: String, hasCover: Bool, lastModified: Date?,
+         dateAdded: Date?, publicationYear: Int?) {
         self.id = id
         self.title = title
         self.titleSort = titleSort
@@ -32,6 +38,8 @@ struct Book: Identifiable, Hashable {
         self.path = path
         self.hasCover = hasCover
         self.lastModified = lastModified
+        self.dateAdded = dateAdded
+        self.publicationYear = publicationYear
         self.searchHaystack = (title + " " + authors.joined(separator: " ")).lowercased()
     }
 

@@ -35,7 +35,8 @@ final class CalibreMetadataReader {
 
             // 2) The books themselves.
             let bookRows = try Row.fetchAll(db, sql: """
-                SELECT id, title, sort, author_sort, path, has_cover, last_modified
+                SELECT id, title, sort, author_sort, path, has_cover,
+                       last_modified, timestamp, pubdate
                 FROM books
                 ORDER BY sort COLLATE NOCASE
             """)
@@ -50,7 +51,9 @@ final class CalibreMetadataReader {
                     authorSort: row["author_sort"] ?? "",
                     path: row["path"] ?? "",
                     hasCover: ((row["has_cover"] as Int64?) ?? 0) != 0,
-                    lastModified: Self.parseDate(row["last_modified"])
+                    lastModified: Self.parseDate(row["last_modified"]),
+                    dateAdded: Self.parseDate(row["timestamp"]),
+                    publicationYear: Self.parseYear(row["pubdate"])
                 )
             }
         }
@@ -109,5 +112,13 @@ final class CalibreMetadataReader {
         if let date = formatter.date(from: value) { return date }
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
+    }
+
+    /// Extracts a 4-digit year from a Calibre date string (e.g. "2018-04-01...").
+    /// Calibre uses the year 0101 as a "no date" sentinel, which we treat as nil.
+    private static func parseYear(_ value: String?) -> Int? {
+        guard let value, value.count >= 4 else { return nil }
+        guard let year = Int(value.prefix(4)) else { return nil }
+        return year <= 101 ? nil : year
     }
 }
