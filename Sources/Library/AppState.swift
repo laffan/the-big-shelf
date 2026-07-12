@@ -27,6 +27,9 @@ final class AppState: ObservableObject {
     @Published private(set) var sortedBooks: [Book] = []
     @Published var searchText: String = ""
     @Published private(set) var coverCaching: CoverCachingState?
+    /// Files sitting in the Dropbox inbox folder — uploaded from the app but
+    /// not yet imported (and deleted) by desktop Calibre.
+    @Published private(set) var pendingInboxFiles: [DropboxFileEntry] = []
 
     @Published var sortOrder: LibrarySortOrder {
         didSet {
@@ -164,6 +167,7 @@ final class AppState: ObservableObject {
                 loadCachedCatalog()
             }
 
+            await refreshInbox()
             phase = .ready
         } catch {
             if !books.isEmpty {
@@ -207,6 +211,55 @@ final class AppState: ObservableObject {
     func deleteDownload(_ format: BookFormat, of book: Book) {
         let fileName = format.exportFileName(title: book.title)
         DownloadsStore.delete(bookId: book.id, fileName: fileName)
+    }
+
+    // MARK: - Adding books (Dropbox inbox for Calibre auto-add)
+
+    /// The Dropbox folder new books are uploaded into. Desktop Calibre's
+    /// "Automatic adding" watches the synced copy of this folder.
+    var inboxPath: String? {
+        guard let config else { return nil }
+        return config.inboxPath ?? LibraryConfig.defaultInboxPath(forRoot: config.rootPath)
+    }
+
+    func setInboxPath(_ path: String) {
+        guard var updated = config else { return }
+        updated.inboxPath = path
+        updated.save()
+        config = updated
+        Task { await refreshInbox() }
+    }
+
+    /// Re-lists the inbox folder. Never affects `phase`; a failed listing just
+    /// keeps whatever we showed last.
+    func refreshInbox() async {
+        guard let inboxPath, DropboxService.shared.isAuthorized else {
+            pendingInboxFiles = []
+            return
+        }
+        if let files = try? await DropboxService.shared.listFiles(path: inboxPath) {
+            pendingInboxFiles = files
+        }
+    }
+
+    /// Uploads a (staged, local) book file into the inbox folder. Throws
+    /// `DropboxError.missingScope` when the token predates the upload scope —
+    /// the caller prompts a re-link and retries.
+    func uploadToInbox(localURL: URL, progress: @escaping (Double) -> Void) async throws {
+        guard let inboxPath else { throw DropboxError.notAuthorized }
+
+        let attributes = try? FileManager.default.attributesOfItem(atPath: localURL.path)
+        let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+        guard size <= DropboxService.maxUploadBytes else {
+            throw DropboxError.requestFailed(
+                "\(localURL.lastPathComponent) is larger than 150 MB, the most a single upload supports. Add it with desktop Calibre instead.")
+        }
+
+        let remotePath = PathUtil.join(inboxPath, localURL.lastPathComponent)
+        try await DropboxService.shared.upload(localURL: localURL, to: remotePath) { fraction in
+            Task { @MainActor in progress(fraction) }
+        }
+        await refreshInbox()
     }
 
     // MARK: - Bulk cover caching (offline browsing)
@@ -259,6 +312,7 @@ final class AppState: ObservableObject {
         reader = nil
         books = []
         sortedBooks = []
+        pendingInboxFiles = []
         config = nil
         searchText = ""
         phase = .onboarding

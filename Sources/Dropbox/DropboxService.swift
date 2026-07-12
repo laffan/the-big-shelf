@@ -9,11 +9,21 @@ struct DropboxFolderEntry: Identifiable, Hashable {
     let pathDisplay: String
 }
 
+/// A file sitting in the inbox folder, waiting for desktop Calibre to import it.
+struct DropboxFileEntry: Identifiable, Hashable {
+    var id: String { pathLower }
+    let name: String
+    let pathLower: String
+    let sizeBytes: UInt64
+    let serverModified: Date
+}
+
 enum DropboxError: LocalizedError {
     case notAuthorized
     case missingAppKey
     case requestFailed(String)
     case fileNotFound(String)
+    case missingScope
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +35,8 @@ enum DropboxError: LocalizedError {
             return message
         case .fileNotFound(let path):
             return "File not found in Dropbox: \(path)"
+        case .missingScope:
+            return "This Dropbox sign-in doesn't have upload permission yet. Re-connect Dropbox to grant it."
         }
     }
 }
@@ -104,6 +116,42 @@ final class DropboxService {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// Lists the files (not folders) directly inside `path`, newest first,
+    /// following pagination. A folder that doesn't exist yet — the inbox before
+    /// the first upload — is simply empty.
+    func listFiles(path: String) async throws -> [DropboxFileEntry] {
+        do {
+            let client = try client
+            var entries: [Files.Metadata] = []
+            var result = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Files.ListFolderResult, Error>) in
+                client.files.listFolder(path: path).response { response, error in
+                    Self.resume(cont, response, error)
+                }
+            }
+            entries.append(contentsOf: result.entries)
+
+            while result.hasMore {
+                let cursor = result.cursor
+                result = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Files.ListFolderResult, Error>) in
+                    client.files.listFolderContinue(cursor: cursor).response { response, error in
+                        Self.resume(cont, response, error)
+                    }
+                }
+                entries.append(contentsOf: result.entries)
+            }
+
+            return entries
+                .compactMap { $0 as? Files.FileMetadata }
+                .map { DropboxFileEntry(name: $0.name,
+                                        pathLower: $0.pathLower ?? "",
+                                        sizeBytes: $0.size,
+                                        serverModified: $0.serverModified) }
+                .sorted { $0.serverModified > $1.serverModified }
+        } catch DropboxError.fileNotFound {
+            return []
+        }
+    }
+
     // MARK: - File metadata
 
     /// Returns the current `rev` of a file, or nil if it does not exist.
@@ -145,6 +193,32 @@ final class DropboxService {
         }
     }
 
+    // MARK: - Uploads
+
+    /// The most a single `files/upload` request accepts. Larger files would
+    /// need chunked upload sessions, which ebooks never realistically hit.
+    static let maxUploadBytes: Int64 = 150 * 1024 * 1024
+
+    /// Uploads a local file to `path`. Missing parent folders are created
+    /// automatically by Dropbox, and a name conflict autorenames the new file
+    /// ("book (1).epub") rather than failing. `progress` (if given) is called
+    /// with a 0...1 fraction on a background queue as bytes are sent.
+    @discardableResult
+    func upload(localURL: URL, to path: String,
+                progress: ((Double) -> Void)? = nil) async throws -> Files.FileMetadata {
+        let client = try client
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Files.FileMetadata, Error>) in
+            let request = client.files.upload(path: path, mode: .add, autorename: true,
+                                              mute: true, input: localURL)
+            if let progress {
+                request.progress { progress($0.fractionCompleted) }
+            }
+            request.response { response, error in
+                Self.resume(cont, response, error)
+            }
+        }
+    }
+
     /// Fetches a cover thumbnail as JPEG data.
     func thumbnail(path: String, size: Files.ThumbnailSize = .w256h256) async throws -> Data {
         let client = try client
@@ -172,8 +246,12 @@ final class DropboxService {
     private static func map<E>(_ error: CallError<E>?) -> Error {
         guard let error else { return DropboxError.requestFailed("Unknown Dropbox error") }
         // Surface "path not found" so callers can treat a missing file as a
-        // soft, recoverable condition.
+        // soft, recoverable condition, and "missing_scope" so uploads can
+        // prompt a re-link when the token predates the write scope.
         let description = error.description
+        if description.localizedCaseInsensitiveContains("missing_scope") {
+            return DropboxError.missingScope
+        }
         if description.localizedCaseInsensitiveContains("not_found") {
             return DropboxError.fileNotFound(description)
         }

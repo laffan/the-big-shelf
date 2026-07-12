@@ -16,6 +16,20 @@ struct LibraryConfig: Codable, Equatable {
     /// When we last successfully synced the catalog.
     var lastSynced: Date?
 
+    /// Dropbox path of the "inbox" folder the app uploads new books into for
+    /// desktop Calibre's automatic adding to pick up. `nil` means use the
+    /// default derived from `rootPath`. (Optional so configs saved by earlier
+    /// versions still decode.)
+    var inboxPath: String?
+
+    /// Default inbox location: a "Calibre Inbox" folder *next to* the library
+    /// root — never inside it, because Calibre refuses to auto-add from its
+    /// own library folder and deletes files after importing them.
+    static func defaultInboxPath(forRoot rootPath: String) -> String {
+        let parent = (rootPath as NSString).deletingLastPathComponent
+        return PathUtil.join(parent.isEmpty ? "/" : parent, "Calibre Inbox")
+    }
+
     private static let key = "BigBookshelf.LibraryConfig"
 
     static func load() -> LibraryConfig? {

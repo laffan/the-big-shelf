@@ -8,6 +8,7 @@ struct LibraryGridView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedBook: Book?
     @State private var showSignOutConfirm = false
+    @State private var showAddBook = false
 
     /// Number of cover columns (zoom level), persisted across launches.
     @AppStorage("BigBookshelf.ColumnCount") private var columnCount: Int = 4
@@ -68,18 +69,40 @@ struct LibraryGridView: View {
                     }
                     .disabled(columnCount <= Self.minColumns)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    addBookButton
                     menu
                 }
             }
             .sheet(item: $selectedBook) { book in
                 BookDetailView(book: book)
             }
+            .sheet(isPresented: $showAddBook) {
+                AddBookView()
+            }
             .confirmationDialog("Sign out of Dropbox and clear the local catalog and downloads?",
                                 isPresented: $showSignOutConfirm, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) { appState.signOut() }
                 Button("Cancel", role: .cancel) {}
             }
+        }
+    }
+
+    /// Opens the "Add to Library" sheet; a small dot marks files still
+    /// waiting in the inbox for desktop Calibre to import.
+    private var addBookButton: some View {
+        Button {
+            showAddBook = true
+        } label: {
+            Image(systemName: "plus")
+                .overlay(alignment: .topTrailing) {
+                    if !appState.pendingInboxFiles.isEmpty {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 5, y: -5)
+                    }
+                }
         }
     }
 
@@ -97,6 +120,10 @@ struct LibraryGridView: View {
                 Task { await appState.sync(force: true) }
             } label: {
                 Label("Refresh Catalog", systemImage: "arrow.clockwise")
+            }
+
+            if !appState.pendingInboxFiles.isEmpty {
+                Text("\(appState.pendingInboxFiles.count) waiting for Calibre")
             }
 
             if appState.coverCaching == nil {

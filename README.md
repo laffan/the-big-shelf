@@ -83,7 +83,9 @@ project.yml   XcodeGen project definition
    - Go to <https://www.dropbox.com/developers/apps> → *Create app* →
      *Scoped access* → *Full Dropbox*.
    - On **Permissions**, enable: `account_info.read`, `files.metadata.read`,
-     `files.content.read`.
+     `files.content.read`, `files.content.write` (the write scope is used only
+     to upload new books into the inbox folder — see *Adding books from your
+     phone* below).
    - Copy the **App key** from **Settings**.
    - Then:
      ```sh
@@ -115,6 +117,42 @@ project.yml   XcodeGen project definition
 4. Tap a cover → see info and **Available Formats** → tap **Send** on a format
    to download it and open the share sheet → choose **Copy to Books**.
 5. Pull to refresh (or *Refresh Catalog* in the menu) to pick up new titles.
+
+---
+
+## Adding books from your phone
+
+The **+** button on the shelf lets you pick book files (EPUB, PDF, MOBI, AZW3,
+CBZ, …) with the system Files picker and upload them to a Dropbox **inbox
+folder** — by default `Calibre Inbox`, created *next to* your library folder.
+Desktop Calibre then imports them using its built-in **Automatic adding**
+feature, so the library database is only ever written by Calibre itself (safe
+by design — no risk of corrupting `metadata.db`).
+
+**One-time setup on your laptop:**
+
+1. In Calibre: **Preferences → Adding books → Automatic adding**.
+2. Set the folder to the *local synced copy* of the inbox, e.g.
+   `~/Dropbox/Books/Calibre Inbox`.
+3. That's it. While Calibre is running (it also checks a couple of seconds
+   after launch), any file that appears in that folder is imported into the
+   library and **deleted from the folder** — that's how the app's
+   *Waiting for Calibre* list empties itself.
+
+Notes:
+
+- The inbox **must not be inside the Calibre library folder** — Calibre
+  refuses to watch its own library. The app's default (a sibling folder) is
+  safe; you can change it from the **+** screen.
+- The flow is: upload from phone → Dropbox syncs → Calibre imports on the
+  laptop → Dropbox syncs the updated `metadata.db` back → pull-to-refresh
+  shows the new book on your shelf. Until then, the file shows under
+  *Waiting for Calibre* on the **+** screen.
+- Single uploads are limited to 150 MB per file (Dropbox API limit); larger
+  files should be added with desktop Calibre directly.
+- **Existing installs:** the upload permission (`files.content.write`) was
+  added later — enable it in the Dropbox App Console (Permissions tab), and
+  the app will prompt you to re-connect Dropbox the first time you upload.
 
 ---
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftyDropbox
 
 /// One-time setup: connect Dropbox, then choose the Calibre library folder.
 struct OnboardingView: View {
@@ -70,18 +69,6 @@ struct OnboardingView: View {
     }
 
     private func startDropboxAuth() {
-        guard let controller = UIApplication.shared.topViewController else { return }
-        let scopeRequest = ScopeRequest(
-            scopeType: .user,
-            scopes: ["account_info.read", "files.metadata.read", "files.content.read"],
-            includeGrantedScopes: false
-        )
-        DropboxClientsManager.authorizeFromControllerV2(
-            UIApplication.shared,
-            controller: controller,
-            loadingStatusDelegate: nil,
-            openURL: { url in UIApplication.shared.open(url) },
-            scopeRequest: scopeRequest
-        )
+        DropboxAuth.startAuthFlow()
     }
 }
